@@ -1,5 +1,4 @@
 import clr
-import sys
 import os
 import time
 
