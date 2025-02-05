@@ -17,7 +17,7 @@ class SystemMonitor(QWidget):
         super().__init__()
 
         display_width = 900
-        display_height = 180
+        display_height = 150
         display_font = "Arial"
         display_font_size = 20
         display_background_rgba = "90, 90, 120, 200"
@@ -34,10 +34,14 @@ class SystemMonitor(QWidget):
         self.systeminfo_thread.start()
 
         # 창 스타일 설정
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Tool)
+        self.setWindowFlags(
+            Qt.FramelessWindowHint |  # 프레임 없음
+            Qt.Tool |                 # 작업 표시줄에 표시되지 않음
+            Qt.WindowStaysOnTopHint | # 항상 위에 표시
+            Qt.NoDropShadowWindowHint # 그림자 효과 없음
+        )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
-        self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)
 
         # UI 라벨 생성
         self.label = QLabel(self)
@@ -185,21 +189,35 @@ class Systeminfo_Thread(QThread):
             gpu_usage = gpu_mem_used = gpu_mem_total = gpu_clock = gpu_temp = "N/A"
             cpu_power = gpu_power = "N/A"
             net_upload = net_download = "N/A"
-            battery = "N/A"
+            battery = battery_flow = "N/A"
 
             for hardware in computer.Hardware:
                 hardware.Update()  # 최신 센서 데이터 업데이트
                 for sensor in hardware.Sensors:
                     if str(sensor.SensorType) == "Load" and "CPU Total" == sensor.Name:
                         cpu_usage = round(sensor.Value, 1)
-                    if str(sensor.SensorType) == "Clock" and "Core #1" == sensor.Name:
+                    if str(sensor.SensorType) == "Clock" and "Core #1" == sensor.Name:  # AMD CPU
                         cpu_clock = round(sensor.Value)
-                    if str(sensor.SensorType) == "Temperature" and "Core (Tctl/Tdie)" == sensor.Name:
+                    if str(sensor.SensorType) == "Clock" and "CPU Core #1" == sensor.Name:  # Intel CPU
+                        cpu_clock = round(sensor.Value)
+                    if str(sensor.SensorType) == "Temperature" and "Core (Tctl/Tdie)" == sensor.Name:  # AMD CPU
                         cpu_temp = round(sensor.Value, 1)
+                    if str(sensor.SensorType) == "Temperature" and "CPU Package" == sensor.Name:  # Intel CPU
+                        cpu_temp = round(sensor.Value, 1)
+                    if str(sensor.SensorType) == "Power" and "Package" == sensor.Name:  # AMD CPU
+                        cpu_power = round(sensor.Value, 1)
+                    if str(sensor.SensorType) == "Power" and "CPU Package" == sensor.Name:  # Intel CPU
+                        cpu_power = round(sensor.Value, 1)
+
                     if str(sensor.SensorType) == "Load" and "GPU Core" == sensor.Name:
                         gpu_usage = round(sensor.Value, 1)
                     if str(sensor.SensorType) == "Temperature" and "GPU Core" == sensor.Name:
                         gpu_temp = round(sensor.Value, 1)
+                    if str(sensor.SensorType) == "Clock" and "GPU Core" == sensor.Name:
+                        gpu_clock = round(sensor.Value)
+                    if str(sensor.SensorType) == "Power" and "GPU Package" == sensor.Name:
+                        gpu_power = round(sensor.Value, 1)
+
                     if str(sensor.SensorType) == "Data" and "Memory Used" == sensor.Name:
                         ram_used = round(sensor.Value, 1)
                     if str(sensor.SensorType) == "Data" and "Memory Available" == sensor.Name:
@@ -208,20 +226,23 @@ class Systeminfo_Thread(QThread):
                         gpu_mem_used = round(sensor.Value / 1024, 1)
                     if str(sensor.SensorType) == "SmallData" and "GPU Memory Total" == sensor.Name:
                         gpu_mem_total = round(sensor.Value / 1024, 1)
-                    if str(sensor.SensorType) == "Clock" and "GPU Core" == sensor.Name:
-                        gpu_clock = round(sensor.Value)
-                    if str(sensor.SensorType) == "Power" and "Package" == sensor.Name:
-                        cpu_power = round(sensor.Value, 1)
-                    if str(sensor.SensorType) == "Power" and "GPU Package" == sensor.Name:
-                        gpu_power = round(sensor.Value, 1)
+
                     if str(sensor.SensorType) == "Throughput" and "Upload Speed" == sensor.Name and net_upload == "N/A":
-                        if hardware.Name == "Wi-Fi" or hardware.Name == "이더넷":
+                        if hardware.Name == "Wi-Fi" or hardware.Name == "이더넷":   # Wi-Fi가 우선순위를 가짐
                             net_upload = round(sensor.Value / 1024 ** 2, 1)
                     if str(sensor.SensorType) == "Throughput" and "Download Speed" == sensor.Name and net_download == "N/A":
-                        if hardware.Name == "Wi-Fi" or hardware.Name == "이더넷":
+                        if hardware.Name == "Wi-Fi" or hardware.Name == "이더넷":   # Wi-Fi 없는 경우 이더넷(랜선) 사용
                             net_download = round(sensor.Value / 1024 ** 2, 1)
+
                     if str(sensor.SensorType) == "Level" and "Charge Level" == sensor.Name:
                         battery = round(sensor.Value, 1)
+                    if str(sensor.SensorType) == "Power" and "Charge Rate" == sensor.Name:
+                        battery_flow = round(sensor.Value, 1)
+                    if str(sensor.SensorType) == "Power" and "Discharge Rate" == sensor.Name:
+                        battery_flow = -round(sensor.Value, 1)
+                    if str(sensor.SensorType) == "Power" and "Charge/Discharge Rate" == sensor.Name:
+                        battery_flow = 0.0
+                    
                     #print(f"{hardware.Name} | {sensor.Name} = {sensor.Value}({type(sensor.Value)}) | {sensor.SensorType}")
 
             if isinstance(ram_used, (int, float)) and isinstance(ram_available, (int, float)):
@@ -242,12 +263,18 @@ class Systeminfo_Thread(QThread):
             result_text = (
                 f'CPU : {color_print(cpu_usage, 1)}% | Clock : {cpu_clock} MHz | TEMP : {color_print(cpu_temp, 2)}°C | POWER : {color_print(cpu_power, 4)}W<br>'
                 f'GPU : {color_print(gpu_usage, 1)}% | Clock : {gpu_clock} MHz | TEMP : {color_print(gpu_temp, 2)}°C | POWER : {color_print(gpu_power, 4)}W<br>'
-                f'RAM : {color_print(ram_usage, 3)}% ({ram_used} / {ram_total}) | '
-                f'VRAM : {color_print(gpu_mem_usage, 3)}% ({gpu_mem_used} / {gpu_mem_total})<br>'
+                f'RAM : {color_print(ram_usage, 3)}% ({ram_used}GB / {ram_total}GB) | '
+                f'VRAM : {color_print(gpu_mem_usage, 3)}% ({gpu_mem_used}GB / {gpu_mem_total}GB)<br>'
             )
             
             if battery != "N/A":
-                result_text = result_text + f"Battery : {color_print(battery, 6)}% | "
+                result_text = result_text + f"Battery : {color_print(battery, 6)}%"
+                if battery_flow != "N/A":
+                    if battery_flow > 0:
+                        result_text = result_text + f" (+{color_print(battery_flow, 7)}W)"
+                    else :
+                        result_text = result_text + f" ({color_print(battery_flow, 7)}W)"
+                result_text = result_text + " | "
             
             result_text = result_text + (
                 f'Net : {color_print(net_upload, 5)}MB/s ↑ {color_print(net_download, 5)}MB/s ↓<br>'
@@ -302,6 +329,13 @@ def color_print(value, type):
             if value > 50:
                 return f"<span style='color:#66FF66'>{value}</span>"  # 초록색
             elif value > 20:
+                return f"<span style='color:#FFFF66'>{value}</span>"  # 노란색
+            else:
+                return f"<span style='color:#FF6666'>{value}</span>"  # 빨간색
+        elif type == 7:     # battery_flow
+            if value > 0:
+                return f"<span style='color:#66FF66'>{value}</span>"  # 초록색
+            elif value > -30:
                 return f"<span style='color:#FFFF66'>{value}</span>"  # 노란색
             else:
                 return f"<span style='color:#FF6666'>{value}</span>"  # 빨간색
