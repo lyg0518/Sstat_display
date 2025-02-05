@@ -1,6 +1,7 @@
 ### Sstat_display
 
-### V0.3.0
+### [V0.3.0](https://github.com/lyg0518/Sstat_display/releases/tag/V0.3.0)
+
 
 ##### 화면 상단에 시스템 정보를 표시해주는 프로그램입니다.
 ##### 주요 정보들을 다른 화면과 같이 볼 수 있습니다.
